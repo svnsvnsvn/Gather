@@ -11,6 +11,11 @@ import shutil
 import cv2
 from tqdm import tqdm
 import albumentations as A
+from albumentations.core.composition import OneOf
+# from albumentations.augmentations.bbox_utils import denormalize_bbox, normalize_bbox
+from albumentations.core.bbox_utils import denormalize_bboxes, normalize_bboxes
+
+from albumentations.core.utils import format_args
 from sklearn.model_selection import train_test_split
 
 # Task 1: Split the dataset
@@ -151,14 +156,56 @@ for split, paths in zip(["train", "validation", "test"], [train_paths, val_paths
 
     print(f"Annotations added to {split_annotation_path}")
 
+# Normalize bounding boxes to [0.0, 1.0]
+def normalize_bbox(bbox, image_width, image_height):
+    x_min, y_min, width, height = bbox
+    return [
+        x_min / image_width,
+        y_min / image_height,
+        (x_min + width) / image_width,
+        (y_min + height) / image_height,
+    ]
+
+def clamp_bbox(bbox, image_width, image_height):
+    x_min, y_min, width, height = bbox
+    x_min = max(0, x_min)
+    y_min = max(0, y_min)
+    x_max = min(image_width, x_min + width)
+    y_max = min(image_height, y_min + height)
+    return [x_min, y_min, x_max - x_min, y_max - y_min]
+
+# Denormalize bounding boxes back to absolute pixel values
+def denormalize_bbox(bbox, image_width, image_height):
+    x_min, y_min, x_max, y_max = bbox
+    return [
+        x_min * image_width,
+        y_min * image_height,
+        (x_max - x_min) * image_width,
+        (y_max - y_min) * image_height,
+    ]
 
 # Task 2: Load the category analysis
+
+# Paths
+train_dir = os.path.join(OUTPUT_SPLIT_DIR, "train")
+annotations_path = os.path.join(train_dir, "annotations.json")
+augmented_dir = os.path.join(train_dir, "augmented")
+os.makedirs(augmented_dir, exist_ok=True)
+
+# Load training annotations
+with open(annotations_path, "r") as f:
+    annotations = json.load(f)
+
+
 CATEGORY_ANALYSIS_FILE = "../outputs/category_analysis.json"  # Path to 'category_analysis.json'
 with open(CATEGORY_ANALYSIS_FILE, 'r') as f:
     category_analysis = json.load(f)
 
 underrepresented = category_analysis["underrepresented"]  # Categories needing augmentation
 category_batches = category_analysis["batches"]  # Map of categories to batches
+
+# Map underrepresented category names to category IDs
+underrepresented_ids = category_analysis["underrepresented"]  # Category IDs needing augmentation
 
 # Task 3: Define the augmentation pipeline
 augment = A.Compose([
@@ -170,30 +217,36 @@ augment = A.Compose([
     A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3),  # color adjustments
     A.RandomCrop(height=200, width=200, p=0.5),  # randomly crop parts of the image
     A.Resize(224, 224)  # resize to 224x224
-])
-
-
-# Task 4: Apply augmentation to training set only
-train_dir = os.path.join(OUTPUT_SPLIT_DIR, "train")
-augmented_dir = os.path.join(train_dir, "augmented")
-os.makedirs(augmented_dir, exist_ok=True)
+],
+    bbox_params=A.BboxParams(format='coco', label_fields=['category_ids']),  # Transform bounding boxes
+    # keypoint_params=A.KeypointParams(format='xy')  # Transform segmentation keypoints (if applicable)
+)
 
 TARGET_COUNT = 200 # minimum number of images per category
+augmented_annotations = [] # Augmented annotations to append
 
-for category, count in tqdm(underrepresented.items(), desc="Processing categories"):
-    print(f"Processing category: {category} (Count: {count})")
+# Task 4: Apply augmentation to training set only
+
+# process underrepresented categories
+for category_id, count in tqdm(underrepresented.items(), desc="Processing categories"):
+    print(f"Processing category ID: {category_id} (Count: {count})")
 
     # Calculate how many images to augment
     num_to_augment = max(0, TARGET_COUNT - count)
 
     # Task 4.1: Locate images for the current category in the training set
     category_images = [
-        img for img in os.listdir(train_dir)
-        if img.endswith(('.jpg', '.jpeg', '.png')) and category in category_batches
+        img["file_name"]
+        for img in annotations["images"]
+        if any(
+            ann["category_id"] == int(category_id)
+            for ann in annotations["annotations"]
+            if ann["image_id"] == img["id"]
+        )
     ]
 
     if not category_images:
-        print(f"No images found for category {category}. Skipping...")
+        print(f"No images found for category ID {category_id}. Skipping...")
         continue
 
     for i in range(num_to_augment):
@@ -206,11 +259,72 @@ for category, count in tqdm(underrepresented.items(), desc="Processing categorie
             print(f"Could not load image {image_path}. Skipping...")
             continue
 
-        # Task 4.2: Load and augment the image
-        augmented = augment(image=image)
+        image_id = next(
+            (img["id"] for img in annotations["images"] if img["file_name"] == original_image_name),
+            None,
+        )
+        if image_id is None:
+            print(f"No image ID found for {original_image_name}. Skipping...")
+            continue
+
+        # Get annotations for this image
+        bboxes = [
+            ann["bbox"]
+            for ann in annotations["annotations"]
+            if ann["image_id"] == image_id
+        ]
+
+        category_ids = [
+            ann["category_id"]
+            for ann in annotations["annotations"]
+            if ann["image_id"] == image_id
+        ]
+
+        # Clamp and normalize bounding boxes
+        clamped_bboxes = [
+            clamp_bbox(bbox, image.shape[1], image.shape[0]) for bbox in bboxes
+        ]
+        normalized_bboxes = [
+            normalize_bbox(bbox, image.shape[1], image.shape[0]) for bbox in clamped_bboxes
+        ]
+
+        # Apply augmentation
+        augmented = augment(image=image, bboxes=normalized_bboxes, category_ids=category_ids)
+
+        # Denormalize augmented bboxes
+        denormalized_bboxes = [
+            denormalize_bbox(bbox, augmented["image"].shape[1], augmented["image"].shape[0])
+            for bbox in augmented["bboxes"]
+        ]
 
         # Save augmented image
         aug_image_name = f"aug_{i}_{original_image_name}"  # Unique name for each augmented image
         aug_image_path = os.path.join(augmented_dir, aug_image_name)
         cv2.imwrite(aug_image_path, augmented['image'])
-        # print(f"Augmented image saved to {aug_image_path}")
+
+        # Update augmented annotations
+        new_image_id = max(img["id"] for img in annotations["images"]) + 1
+        annotations["images"].append(
+            {
+                "id": new_image_id,
+                "file_name": aug_image_name,
+                "height": augmented["image"].shape[0],
+                "width": augmented["image"].shape[1],
+            }
+        )
+
+        for bbox, category_id in zip(denormalized_bboxes, augmented["category_ids"]):
+            augmented_annotations.append(
+                {
+                    "image_id": new_image_id,
+                    "bbox": bbox,
+                    "category_id": category_id,
+                }
+            )
+
+# Append augmented annotations to the training file
+annotations["annotations"].extend(augmented_annotations)
+
+# Save updated annotations
+with open(os.path.join(augmented_dir, "augmented_annotations.json"), "w") as f:
+    json.dump(annotations, f, indent=4)
