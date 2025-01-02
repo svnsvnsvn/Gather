@@ -146,7 +146,8 @@ for split, paths in zip(["train", "validation", "test"], [train_paths, val_paths
     split_annotation = {
         'images': split_images,  # Only images in the split
         'annotations': split_annotations,  # Corresponding annotations
-        # Add other keys if they exist in your annotation structure
+        'categories': annotations['categories'],
+        'scene_categories': annotations.get('scene_categories', [])
     }
 
     # Save the annotations to the split directory
@@ -159,20 +160,36 @@ for split, paths in zip(["train", "validation", "test"], [train_paths, val_paths
 # Normalize bounding boxes to [0.0, 1.0]
 def normalize_bbox(bbox, image_width, image_height):
     x_min, y_min, width, height = bbox
-    return [
-        x_min / image_width,
-        y_min / image_height,
-        (x_min + width) / image_width,
-        (y_min + height) / image_height,
-    ]
+    x_max = x_min + width
+    y_max = y_min + height
 
-def clamp_bbox(bbox, image_width, image_height):
-    x_min, y_min, width, height = bbox
-    x_min = max(0, x_min)
-    y_min = max(0, y_min)
-    x_max = min(image_width, x_min + width)
-    y_max = min(image_height, y_min + height)
-    return [x_min, y_min, x_max - x_min, y_max - y_min]
+    # Normalize values
+    normalized_bbox = [
+        max(0.0, min(x_min / image_width, 1.0)),
+        max(0.0, min(y_min / image_height, 1.0)),
+        max(0.0, min(x_max / image_width, 1.0)),
+        max(0.0, min(y_max / image_height, 1.0))
+    ]
+    return normalized_bbox
+
+def validate_bbox(bbox):
+    x_min, y_min, x_max, y_max = bbox
+    return 0.0 <= x_min <= 1.0 and 0.0 <= y_min <= 1.0 and 0.0 <= x_max <= 1.0 and 0.0 <= y_max <= 1.0
+
+def clamp_bbox(bbox, width, height):
+    """
+    Ensure that the bounding box coordinates are within the image boundaries.
+    """
+    x_min = max(0, min(bbox[0], width))
+    y_min = max(0, min(bbox[1], height))
+    x_max = max(0, min(bbox[0] + bbox[2], width))
+    y_max = max(0, min(bbox[1] + bbox[3], height))
+
+    clamped_width = max(0, x_max - x_min)
+    clamped_height = max(0, y_max - y_min)
+
+    return [x_min, y_min, clamped_width, clamped_height]
+
 
 # Denormalize bounding boxes back to absolute pixel values
 def denormalize_bbox(bbox, image_width, image_height):
@@ -184,6 +201,35 @@ def denormalize_bbox(bbox, image_width, image_height):
         (y_max - y_min) * image_height,
     ]
 
+# Function to normalize segmentation points
+def normalize_segmentation(segmentation, width, height):
+    """
+    Normalize segmentation coordinates to [0, 1].
+    Each segmentation is a list of polygons, and this function processes each polygon.
+    """
+    normalized_seg = []
+    for polygon in segmentation:  # Iterate over each polygon
+        normalized_polygon = [
+            coord / width if i % 2 == 0 else coord / height
+            for i, coord in enumerate(polygon)
+        ]
+        normalized_seg.append(normalized_polygon)
+    return normalized_seg
+
+def denormalize_segmentation(segmentation, width, height):
+    """
+    Denormalize segmentation coordinates from [0, 1] back to pixel values.
+    """
+    denormalized_seg = []
+    for polygon in segmentation:
+        denormalized_polygon = [
+            coord * width if i % 2 == 0 else coord * height
+            for i, coord in enumerate(polygon)
+        ]
+        denormalized_seg.append(denormalized_polygon)
+    return denormalized_seg
+
+
 # Task 2: Load the category analysis
 
 # Paths
@@ -192,22 +238,355 @@ annotations_path = os.path.join(train_dir, "annotations.json")
 augmented_dir = os.path.join(train_dir, "augmented")
 os.makedirs(augmented_dir, exist_ok=True)
 
-# Load training annotations
+# Load primary training annotations
 with open(annotations_path, "r") as f:
     annotations = json.load(f)
 
+# Include the categories and scene_categories in the final augmented_metadata
+categories = [
+    {
+            "supercategory": "Aluminium foil",
+            "id": 0,
+            "name": "Aluminium foil"
+        },
+        {
+            "supercategory": "Battery",
+            "id": 1,
+            "name": "Battery"
+        },
+        {
+            "supercategory": "Blister pack",
+            "id": 2,
+            "name": "Aluminium blister pack"
+        },
+        {
+            "supercategory": "Blister pack",
+            "id": 3,
+            "name": "Carded blister pack"
+        },
+        {
+            "supercategory": "Bottle",
+            "id": 4,
+            "name": "Other plastic bottle"
+        },
+        {
+            "supercategory": "Bottle",
+            "id": 5,
+            "name": "Clear plastic bottle"
+        },
+        {
+            "supercategory": "Bottle",
+            "id": 6,
+            "name": "Glass bottle"
+        },
+        {
+            "supercategory": "Bottle cap",
+            "id": 7,
+            "name": "Plastic bottle cap"
+        },
+        {
+            "supercategory": "Bottle cap",
+            "id": 8,
+            "name": "Metal bottle cap"
+        },
+        {
+            "supercategory": "Broken glass",
+            "id": 9,
+            "name": "Broken glass"
+        },
+        {
+            "supercategory": "Can",
+            "id": 10,
+            "name": "Food Can"
+        },
+        {
+            "supercategory": "Can",
+            "id": 11,
+            "name": "Aerosol"
+        },
+        {
+            "supercategory": "Can",
+            "id": 12,
+            "name": "Drink can"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 13,
+            "name": "Toilet tube"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 14,
+            "name": "Other carton"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 15,
+            "name": "Egg carton"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 16,
+            "name": "Drink carton"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 17,
+            "name": "Corrugated carton"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 18,
+            "name": "Meal carton"
+        },
+        {
+            "supercategory": "Carton",
+            "id": 19,
+            "name": "Pizza box"
+        },
+        {
+            "supercategory": "Cup",
+            "id": 20,
+            "name": "Paper cup"
+        },
+        {
+            "supercategory": "Cup",
+            "id": 21,
+            "name": "Disposable plastic cup"
+        },
+        {
+            "supercategory": "Cup",
+            "id": 22,
+            "name": "Foam cup"
+        },
+        {
+            "supercategory": "Cup",
+            "id": 23,
+            "name": "Glass cup"
+        },
+        {
+            "supercategory": "Cup",
+            "id": 24,
+            "name": "Other plastic cup"
+        },
+        {
+            "supercategory": "Food waste",
+            "id": 25,
+            "name": "Food waste"
+        },
+        {
+            "supercategory": "Glass jar",
+            "id": 26,
+            "name": "Glass jar"
+        },
+        {
+            "supercategory": "Lid",
+            "id": 27,
+            "name": "Plastic lid"
+        },
+        {
+            "supercategory": "Lid",
+            "id": 28,
+            "name": "Metal lid"
+        },
+        {
+            "supercategory": "Other plastic",
+            "id": 29,
+            "name": "Other plastic"
+        },
+        {
+            "supercategory": "Paper",
+            "id": 30,
+            "name": "Magazine paper"
+        },
+        {
+            "supercategory": "Paper",
+            "id": 31,
+            "name": "Tissues"
+        },
+        {
+            "supercategory": "Paper",
+            "id": 32,
+            "name": "Wrapping paper"
+        },
+        {
+            "supercategory": "Paper",
+            "id": 33,
+            "name": "Normal paper"
+        },
+        {
+            "supercategory": "Paper bag",
+            "id": 34,
+            "name": "Paper bag"
+        },
+        {
+            "supercategory": "Paper bag",
+            "id": 35,
+            "name": "Plastified paper bag"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 36,
+            "name": "Plastic film"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 37,
+            "name": "Six pack rings"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 38,
+            "name": "Garbage bag"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 39,
+            "name": "Other plastic wrapper"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 40,
+            "name": "Single-use carrier bag"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 41,
+            "name": "Polypropylene bag"
+        },
+        {
+            "supercategory": "Plastic bag & wrapper",
+            "id": 42,
+            "name": "Crisp packet"
+        },
+        {
+            "supercategory": "Plastic container",
+            "id": 43,
+            "name": "Spread tub"
+        },
+        {
+            "supercategory": "Plastic container",
+            "id": 44,
+            "name": "Tupperware"
+        },
+        {
+            "supercategory": "Plastic container",
+            "id": 45,
+            "name": "Disposable food container"
+        },
+        {
+            "supercategory": "Plastic container",
+            "id": 46,
+            "name": "Foam food container"
+        },
+        {
+            "supercategory": "Plastic container",
+            "id": 47,
+            "name": "Other plastic container"
+        },
+        {
+            "supercategory": "Plastic glooves",
+            "id": 48,
+            "name": "Plastic glooves"
+        },
+        {
+            "supercategory": "Plastic utensils",
+            "id": 49,
+            "name": "Plastic utensils"
+        },
+        {
+            "supercategory": "Pop tab",
+            "id": 50,
+            "name": "Pop tab"
+        },
+        {
+            "supercategory": "Rope & strings",
+            "id": 51,
+            "name": "Rope & strings"
+        },
+        {
+            "supercategory": "Scrap metal",
+            "id": 52,
+            "name": "Scrap metal"
+        },
+        {
+            "supercategory": "Shoe",
+            "id": 53,
+            "name": "Shoe"
+        },
+        {
+            "supercategory": "Squeezable tube",
+            "id": 54,
+            "name": "Squeezable tube"
+        },
+        {
+            "supercategory": "Straw",
+            "id": 55,
+            "name": "Plastic straw"
+        },
+        {
+            "supercategory": "Straw",
+            "id": 56,
+            "name": "Paper straw"
+        },
+        {
+            "supercategory": "Styrofoam piece",
+            "id": 57,
+            "name": "Styrofoam piece"
+        },
+        {
+            "supercategory": "Unlabeled litter",
+            "id": 58,
+            "name": "Unlabeled litter"
+        },
+        {
+            "supercategory": "Cigarette",
+            "id": 59,
+            "name": "Cigarette"
+        }
+]  
+
+
+scene_categories = [
+    {"id": 0, "name": "Clean"},
+    {"id": 1, "name": "Indoor, Man-made"},
+    {"id": 2, "name": "Pavement"},
+    {"id": 3, "name": "Sand, Dirt, Pebbles"},
+    {"id": 4, "name": "Trash"},
+    {"id": 5, "name": "Vegetation"},
+    {"id": 6, "name": "Water"}
+]
+
+scene_category_mapping = {
+    "clean": 0,
+    "indoor": 1,
+    "pavement": 2,
+    "sand": 3,
+    "trash": 4,
+    "vegetation": 5,
+    "water": 6
+}
+
+# Assign scene_category_id during augmentation
+# todo
+
+
+# Prepare a separate file for augmented images metadata
+augmented_metadata = {
+    "images": [],
+    "annotations": [],
+    "categories": categories,
+    "scene_categories": scene_categories
+}
+
+TARGET_COUNT = 200 # minimum number of images per category
 
 CATEGORY_ANALYSIS_FILE = "../outputs/category_analysis.json"  # Path to 'category_analysis.json'
 with open(CATEGORY_ANALYSIS_FILE, 'r') as f:
     category_analysis = json.load(f)
 
 underrepresented = category_analysis["underrepresented"]  # Categories needing augmentation
-category_batches = category_analysis["batches"]  # Map of categories to batches
 
-# Map underrepresented category names to category IDs
-underrepresented_ids = category_analysis["underrepresented"]  # Category IDs needing augmentation
-
-# Task 3: Define the augmentation pipeline
 augment = A.Compose([
     A.HorizontalFlip(p=0.5),  # flip images horizontally
     A.Rotate(limit=30, p=0.5),  # rotate images randomly up to 30 degrees
@@ -222,27 +601,15 @@ augment = A.Compose([
     # keypoint_params=A.KeypointParams(format='xy')  # Transform segmentation keypoints (if applicable)
 )
 
-TARGET_COUNT = 200 # minimum number of images per category
-augmented_annotations = [] # Augmented annotations to append
 
-# Task 4: Apply augmentation to training set only
-
-# process underrepresented categories
 for category_id, count in tqdm(underrepresented.items(), desc="Processing categories"):
     print(f"Processing category ID: {category_id} (Count: {count})")
-
-    # Calculate how many images to augment
     num_to_augment = max(0, TARGET_COUNT - count)
 
-    # Task 4.1: Locate images for the current category in the training set
     category_images = [
         img["file_name"]
         for img in annotations["images"]
-        if any(
-            ann["category_id"] == int(category_id)
-            for ann in annotations["annotations"]
-            if ann["image_id"] == img["id"]
-        )
+        if any(ann["category_id"] == int(category_id) for ann in annotations["annotations"] if ann["image_id"] == img["id"])
     ]
 
     if not category_images:
@@ -250,7 +617,6 @@ for category_id, count in tqdm(underrepresented.items(), desc="Processing catego
         continue
 
     for i in range(num_to_augment):
-        # Cycle through available images
         original_image_name = category_images[i % len(category_images)]
         image_path = os.path.join(train_dir, original_image_name)
 
@@ -259,72 +625,83 @@ for category_id, count in tqdm(underrepresented.items(), desc="Processing catego
             print(f"Could not load image {image_path}. Skipping...")
             continue
 
-        image_id = next(
-            (img["id"] for img in annotations["images"] if img["file_name"] == original_image_name),
-            None,
-        )
-        if image_id is None:
-            print(f"No image ID found for {original_image_name}. Skipping...")
-            continue
+        image_id = next(img["id"] for img in annotations["images"] if img["file_name"] == original_image_name)
 
-        # Get annotations for this image
-        bboxes = [
-            ann["bbox"]
-            for ann in annotations["annotations"]
-            if ann["image_id"] == image_id
-        ]
+        bboxes = [ann["bbox"] for ann in annotations["annotations"] if ann["image_id"] == image_id]
+        category_ids = [ann["category_id"] for ann in annotations["annotations"] if ann["image_id"] == image_id]
+        segmentations = [ann["segmentation"] for ann in annotations["annotations"] if ann["image_id"] == image_id]
 
-        category_ids = [
-            ann["category_id"]
-            for ann in annotations["annotations"]
-            if ann["image_id"] == image_id
-        ]
-
-        # Clamp and normalize bounding boxes
-        clamped_bboxes = [
-            clamp_bbox(bbox, image.shape[1], image.shape[0]) for bbox in bboxes
-        ]
-        normalized_bboxes = [
-            normalize_bbox(bbox, image.shape[1], image.shape[0]) for bbox in clamped_bboxes
+        # Normalize bounding boxes and segmentation points
+        normalized_bboxes = [normalize_bbox(bbox, image.shape[1], image.shape[0]) for bbox in bboxes]
+        valid_bboxes = [bbox for bbox in normalized_bboxes if validate_bbox(bbox)]
+        if len(valid_bboxes) != len(normalized_bboxes):
+            print(f"Invalid bounding boxes found: {len(normalized_bboxes) - len(valid_bboxes)}")
+        
+        normalized_segmentations = [
+            normalize_segmentation(seg, image.shape[1], image.shape[0]) for seg in segmentations
         ]
 
         # Apply augmentation
-        augmented = augment(image=image, bboxes=normalized_bboxes, category_ids=category_ids)
+        augmented = augment(image=image, bboxes=valid_bboxes, category_ids=category_ids)
 
-        # Denormalize augmented bboxes
+        # Denormalize augmented bounding boxes and segmentation points
         denormalized_bboxes = [
             denormalize_bbox(bbox, augmented["image"].shape[1], augmented["image"].shape[0])
             for bbox in augmented["bboxes"]
         ]
+        denormalized_segmentations = [
+            denormalize_segmentation(seg, augmented["image"].shape[1], augmented["image"].shape[0])
+            for seg in normalized_segmentations
+        ]
 
-        # Save augmented image
-        aug_image_name = f"aug_{i}_{original_image_name}"  # Unique name for each augmented image
+        aug_image_name = f"aug_{i}_{original_image_name}"
         aug_image_path = os.path.join(augmented_dir, aug_image_name)
         cv2.imwrite(aug_image_path, augmented['image'])
 
-        # Update augmented annotations
         new_image_id = max(img["id"] for img in annotations["images"]) + 1
-        annotations["images"].append(
-            {
-                "id": new_image_id,
-                "file_name": aug_image_name,
-                "height": augmented["image"].shape[0],
-                "width": augmented["image"].shape[1],
-            }
-        )
+        new_image_entry = {
+            "id": new_image_id,
+            "height": augmented["image"].shape[0],
+            "width": augmented["image"].shape[1],
+            "file_name": os.path.join(aug_image_name),
 
-        for bbox, category_id in zip(denormalized_bboxes, augmented["category_ids"]):
-            augmented_annotations.append(
-                {
-                    "image_id": new_image_id,
-                    "bbox": bbox,
-                    "category_id": category_id,
-                }
-            )
+        }
+        annotations["images"].append(new_image_entry)
+        augmented_metadata["images"].append(new_image_entry)
+
+        for bbox, category_id, segmentation in zip(
+            denormalized_bboxes, augmented["category_ids"], denormalized_segmentations
+        ):
+            new_annotation = {
+                "id": max(ann["id"] for ann in annotations["annotations"]) + 1,
+                "image_id": new_image_id,
+                "category_id": category_id,
+                "bbox": bbox,
+                "segmentation": segmentation,
+                "iscrowd": 0,
+                "area": bbox[2] * bbox[3],
+            }
+            annotations["annotations"].append(new_annotation)
+            augmented_metadata["annotations"].append(new_annotation)
 
 # Append augmented annotations to the training file
-annotations["annotations"].extend(augmented_annotations)
+annotations["annotations"].extend(augmented_metadata["annotations"])
 
-# Save updated annotations
-with open(os.path.join(augmented_dir, "augmented_annotations.json"), "w") as f:
+# Save updated primary annotations
+with open(annotations_path, "w") as f:
     json.dump(annotations, f, indent=4)
+
+# Save augmented metadata
+augmented_metadata_path = os.path.join(augmented_dir, "augmented_annotations.json")
+with open(augmented_metadata_path, "w") as f:
+    json.dump(augmented_metadata, f, indent=4)
+
+# Issues:
+# 1. image_id and annotation.image_id mismatch, leading to incorrect linkages.
+# 2. Bounding boxes exceed image dimensions or have invalid (negative/zero) sizes due to augmentation issues.
+# 3. Segmentation points go out of bounds or are invalid (e.g., fewer than 3 points).
+# 4. Negative or zero area values indicate invalid bounding boxes or segmentations.
+# 5. Underrepresented categories might not be augmented adequately due to incorrect image selection.
+# 6. Augmented metadata (images, annotations) may not align with COCO format.
+# 7. Visualization fails due to invalid bounding boxes, segmentations, or missing image paths.
+# 8. Validation checks may miss inconsistencies in bounding boxes, segmentations, or area calculations.
