@@ -5,10 +5,8 @@ from tqdm import tqdm
 from collections import Counter
 from sklearn.model_selection import train_test_split
 
-# 1) Point to the parent directory of your batch_* folders
 BATCH_DIR = "../data/raw"
 
-# 2) Directory to save final splits
 OUTPUT_SPLIT_DIR = "../data/split"
 os.makedirs(OUTPUT_SPLIT_DIR, exist_ok=True)
 for split_name in ["train", "validation", "test"]:
@@ -22,9 +20,7 @@ batch_annotations = {}
 image_paths = []
 class_labels = []
 
-# ------------------------------
-# STEP A: Read each "batch_*" folder
-# ------------------------------
+
 subfolders = sorted(os.listdir(BATCH_DIR))  # e.g. ["batch_1","batch_2","batch_12",...]
 for subfolder in tqdm(subfolders, desc="Processing batches"):
     batch_path = os.path.join(BATCH_DIR, subfolder)
@@ -41,10 +37,10 @@ for subfolder in tqdm(subfolders, desc="Processing batches"):
     with open(annotation_file, "r") as f:
         annotations = json.load(f)
     
-    # Prepare to convert local IDs to global unique IDs
+    # convert local IDs to global unique IDs
     id_mapping = {}
     
-    # --- Re-label images ---
+    # Re-label images
     for img in annotations["images"]:
         old_id = img["id"]
         new_id = next_image_id
@@ -56,7 +52,7 @@ for subfolder in tqdm(subfolders, desc="Processing batches"):
         
         next_image_id += 1
     
-    # --- Re-label annotations ---
+    # Re-label annotations
     for ann in annotations["annotations"]:
         ann["id"] = next_annotation_id
         ann["image_id"] = id_mapping[ann["image_id"]]
@@ -74,9 +70,8 @@ for subfolder in tqdm(subfolders, desc="Processing batches"):
     # Build global list for train_test_split
     for img in annotations["images"]:
         img_id = img["id"]
-        final_filename = img["file_name"]  # e.g. "batch_12_000040.jpg"
+        final_filename = img["file_name"]  
         
-        # The real path on disk is still ../data/raw/batch_12/000040.jpg
         original_filename = final_filename.split("_", 1)[1]  # remove the subfolder prefix
         raw_path = os.path.join(BATCH_DIR, subfolder, original_filename)
         
@@ -90,9 +85,6 @@ for subfolder in tqdm(subfolders, desc="Processing batches"):
 
 print(f"Collected {len(image_paths)} labeled images total.")
 
-# ------------------------------
-# STEP B: Filter out rare classes
-# ------------------------------
 label_counts = Counter(class_labels)
 valid_labels = {l for l, c in label_counts.items() if c >= 2}
 filtered_image_paths = []
@@ -103,9 +95,7 @@ for p, l in zip(image_paths, class_labels):
         filtered_class_labels.append(l)
 print(f"After filtering, {len(filtered_image_paths)} remain.")
 
-# ------------------------------
-# STEP C: Split into train/val/test
-# ------------------------------
+
 train_paths, temp_paths, train_labels, temp_labels = train_test_split(
     filtered_image_paths,
     filtered_class_labels,
@@ -114,7 +104,6 @@ train_paths, temp_paths, train_labels, temp_labels = train_test_split(
     random_state=42
 )
 
-# If you want to handle extremely rare classes in the temp set:
 temp_label_counts = Counter(temp_labels)
 def maybe_other(label):
     return label if temp_label_counts[label] >= 2 else "Other"
@@ -132,9 +121,7 @@ print(f"  Train: {len(train_paths)}")
 print(f"  Val:   {len(val_paths)}")
 print(f"  Test:  {len(test_paths)}")
 
-# ------------------------------
-# STEP D: Create final dicts for splits
-# ------------------------------
+
 split_annotations = {
     "train": {"images": [], "annotations": [], "categories": []},
     "validation": {"images": [], "annotations": [], "categories": []},
@@ -145,9 +132,7 @@ added_image_ids = {s: set() for s in split_annotations}
 added_annotation_ids = {s: set() for s in split_annotations}
 global_assigned_images = set()
 
-# ------------------------------
-# STEP E: Assign images + ann per batch
-# ------------------------------
+
 for subfolder, ann_data in tqdm(batch_annotations.items(), desc="Assigning to splits"):
     # Filter each split's paths for the current subfolder
     train_paths_batch = [p for p in train_paths if os.path.dirname(p).endswith(subfolder)]
@@ -168,8 +153,8 @@ for subfolder, ann_data in tqdm(batch_annotations.items(), desc="Assigning to sp
 
         for raw_path in batch_paths:
             # raw_path is e.g. ../data/raw/batch_12/000040.jpg
-            file_name_only = os.path.basename(raw_path)  # "000040.jpg"
-            prefixed_name = f"{subfolder}_{file_name_only}"  # "batch_12_000040.jpg"
+            file_name_only = os.path.basename(raw_path)  
+            prefixed_name = f"{subfolder}_{file_name_only}"  
 
             if prefixed_name in global_assigned_images:
                 continue
@@ -193,9 +178,7 @@ for subfolder, ann_data in tqdm(batch_annotations.items(), desc="Assigning to sp
                     split_annotations[split_name]["annotations"].append(an)
                     added_annotation_ids[split_name].add(an["id"])
 
-# ------------------------------
-# STEP F: Copy images and write each annotations.json
-# ------------------------------
+
 for split_name in ["train", "validation", "test"]:
     split_dir = os.path.join(OUTPUT_SPLIT_DIR, split_name)
     os.makedirs(split_dir, exist_ok=True)
@@ -207,16 +190,10 @@ for split_name in ["train", "validation", "test"]:
         sub_part, original_filename = rest.split("_", 1)
         subfolder = first_part + "_" + sub_part
 
-        # # e.g. "batch_12_000040.jpg"
-        # subfolder = img_info["file_name"].split("_", 1)[0]  # "batch_12"
-        # original_filename = "_".join(img_info["file_name"].split("_", 1)[1:])  # "000040.jpg"
-
-        # print(subfolder)
-        # print(original_filename)
         src = os.path.join(BATCH_DIR, subfolder, original_filename)
         dst = os.path.join(split_dir, img_info["file_name"])
 
-        # Optional: fallback for extension mismatch
+        # fallback for extension mismatch
         if not os.path.exists(src):
             alt_src = os.path.splitext(src)[0] + ".JPG"
             if os.path.exists(alt_src):
@@ -233,9 +210,7 @@ for split_name in ["train", "validation", "test"]:
     with open(anno_path, "w") as f:
         json.dump(split_annotations[split_name], f, indent=4)
 
-# ------------------------------
-# Summary
-# ------------------------------
+
 for split_name in ["train", "validation", "test"]:
     n_imgs = len(split_annotations[split_name]["images"])
     n_anns = len(split_annotations[split_name]["annotations"])
@@ -243,4 +218,4 @@ for split_name in ["train", "validation", "test"]:
     print(f"  Images: {n_imgs}")
     print(f"  Annotations: {n_anns}")
 
-print(f"\nDone! Check {OUTPUT_SPLIT_DIR} for results.")
+print(f"\nDone! Check {OUTPUT_SPLIT_DIR} for results. :)")
