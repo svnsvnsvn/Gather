@@ -1,5 +1,6 @@
 data/
-venv/
+.venv/
+tfjs_env/
 notes/
 notebooks/.ipynb_checkpoints/demo-checkpoint.ipynb
 scripts/dataAug.py
