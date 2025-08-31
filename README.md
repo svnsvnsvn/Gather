@@ -1,10 +1,12 @@
-# Gather 🍃
+# Gather ♻️🌱
 
 > *A computer vision learning project documenting the journey from ML fundamentals to production deployment*
 
 ## What This Project Actually Is
 
 This is a waste classification system built to understand the complete ML pipeline from data exploration to web deployment. 
+
+[Try it here!](https://gather-production-2186.up.railway.app)
 
 **Current Status**: 
 - Production ready classification system with 85%+ accuracy
