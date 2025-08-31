@@ -175,6 +175,19 @@ config/secrets.json
 *.pem
 *.crt
 
+# API keys and sensitive configs
+.env.*
+!.env.example
+config/production.json
+config/local.json
+api_keys.json
+credentials.json
+
+# Deployment configs with sensitive info
+docker-compose.override.yml
+kubernetes-secrets.yaml
+.railway-env
+
 # Cache directories
 .cache/
 .parcel-cache/
@@ -231,3 +244,19 @@ web-app/src/assets/fonts/*.ttf
 web-app/src/assets/fonts/*.woff
 web-app/src/assets/fonts/*.woff2
 !web-app/src/assets/fonts/README.md
+
+# Personal/Private files
+TODO.md
+PERSONAL_NOTES.md
+interview_prep/
+portfolio_drafts/
+*.personal
+.personal/
+
+# Large files that shouldn't be in repo
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.large

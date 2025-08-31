@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import tensorflow as tf
 from tensorflow import keras
@@ -7,13 +7,18 @@ from PIL import Image
 import io
 import base64
 import logging
+import os
 from config import Config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Determine if we're in production and need to serve static files
+PRODUCTION = os.environ.get('FLASK_ENV') == 'production'
+STATIC_FOLDER = '../web-app/dist' if PRODUCTION else None
+
+app = Flask(__name__, static_folder=STATIC_FOLDER)
 CORS(app)  # Enable CORS for all routes
 
 # Load configuration
@@ -125,6 +130,20 @@ def predict():
 @app.route('/classes', methods=['GET'])
 def get_classes():
     return jsonify({'classes': config.class_names})
+
+# Serve React app in production
+if PRODUCTION:
+    @app.route('/')
+    def serve_react_app():
+        return send_from_directory(app.static_folder, 'index.html')
+    
+    @app.route('/<path:path>')
+    def serve_static_files(path):
+        # Try to serve the file, if not found serve React app (for client-side routing)
+        try:
+            return send_from_directory(app.static_folder, path)
+        except:
+            return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     logger.info("Starting Waste Classifier API...")

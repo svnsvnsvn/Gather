@@ -1,0 +1,5 @@
+# Let Railway auto-detect and build everything
+# Nixpacks will handle Node.js frontend + Python backend automatically
+
+[deploy]
+startCommand = "python backend/app.py"
