@@ -13,7 +13,7 @@ This is a waste classification system built to understand the complete ML pipeli
 - Full-stack ML application (training → API → frontend)
 - Scalable architecture with proper ML engineering practices
 - 9+ months of iterative development and learning
-- 🔄 Exploring advanced techniques: ensemble methods, active learning
+- 🔄 Exploring different techniques: ensemble methods, active learning
 
 ---
 
@@ -28,7 +28,7 @@ This is a waste classification system built to understand the complete ML pipeli
 - Multi-class classification with 1500+ highly specific categories
 - Data preprocessing for extremely imbalanced classes
 - Handling complex annotations and bounding boxes
-- Working with real-world, messy data distributions
+- Working with real, messy data distributions
 
 **What I Learned**:
 - Why dataset complexity matters more than size
@@ -37,7 +37,6 @@ This is a waste classification system built to understand the complete ML pipeli
 - When to scope down vs. when to push through
 - Real-world datasets are messy and require significant preprocessing
 
-**Strategic Pivot**: Chose to focus on fundamental ML engineering skills with a manageable problem scope rather than getting lost in dataset complexity. This wasn't giving up—it was strategic learning prioritization.
 
 ### Phase 1: ML Fundamentals with Focused Scope (February - June 2025)
 **Duration**: ~4 months  
