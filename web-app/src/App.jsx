@@ -137,24 +137,33 @@ function App() {
 
   return (
     <div className="App">
+      {/* Skip to main content link */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      
       <header className="header">
         <h1>Gather</h1>
         <p>Upload an image to classify waste and get recycling advice</p>
       </header>
 
-      <main className="main">
+      <main id="main-content" className="main" role="main">
         {/* Server Status - only show when disconnected */}
         {!serverConnected && !checkingServer && (
-          <div className="status disconnected">
+          <div className="status disconnected" role="alert" aria-live="polite">
             <span>backend disconnected</span>
-            <button onClick={checkServerStatus} className="retry-btn">
+            <button 
+              onClick={checkServerStatus} 
+              className="retry-btn"
+              aria-label="Retry connection to backend server"
+            >
               retry connection
             </button>
           </div>
         )}
 
         {error && (
-          <div className="error">
+          <div className="error" role="alert" aria-live="assertive">
             {error}
           </div>
         )}
@@ -168,13 +177,21 @@ function App() {
             accept="image/*"
             className="file-input"
             id="image-upload"
+            aria-describedby="upload-description"
           />
           <label htmlFor="image-upload" className="upload-btn">
             Choose Image
           </label>
+          <div id="upload-description" className="visually-hidden">
+            Select an image file to classify waste type and get recycling advice
+          </div>
           
           {selectedImage && (
-            <button onClick={resetApp} className="reset-btn">
+            <button 
+              onClick={resetApp} 
+              className="reset-btn"
+              aria-label="Clear selected image and reset the form"
+            >
               Clear
             </button>
           )}
@@ -185,7 +202,7 @@ function App() {
           <div className="image-section">
             <img
               src={selectedImage}
-              alt="Selected waste item"
+              alt="Selected waste item for classification"
               className="preview-image"
             />
             
@@ -193,22 +210,27 @@ function App() {
               onClick={classifyImage}
               disabled={isLoading || !serverConnected}
               className="classify-btn"
+              aria-describedby="classify-description"
+              aria-label={isLoading ? "Classifying image, please wait" : "Classify the selected waste image"}
             >
               {isLoading ? 'Classifying...' : 'Classify Waste'}
             </button>
+            <div id="classify-description" className="visually-hidden">
+              Click to analyze the selected image and get waste classification results
+            </div>
           </div>
         )}
 
         {/* Results */}
         {prediction && (
-          <div className="results">
-            <h2>Classification Results</h2>
+          <div className="results" role="region" aria-labelledby="results-heading">
+            <h2 id="results-heading">Classification Results</h2>
             
             <div className="main-result">
               <h3 style={{ color: getCategoryColor(prediction.predicted_class) }}>
                 Predicted: {prediction.predicted_class}
               </h3>
-              <p className="confidence">
+              <p className="confidence" aria-label={`Confidence level: ${(prediction.confidence * 100).toFixed(1)} percent`}>
                 Confidence: {(prediction.confidence * 100).toFixed(1)}%
               </p>
               
@@ -224,15 +246,18 @@ function App() {
             </div>
 
             {prediction.all_predictions && (
-              <div className="all-predictions">
-                <h4>All Predictions:</h4>
-                <div className="predictions-list">
+              <div className="all-predictions" role="region" aria-labelledby="all-predictions-heading">
+                <h4 id="all-predictions-heading">All Predictions:</h4>
+                <div className="predictions-list" role="list">
                   {prediction.all_predictions.slice(0, 5).map((pred, index) => (
-                    <div key={index} className="prediction-item">
+                    <div key={index} className="prediction-item" role="listitem">
                       <span className="category" style={{ color: getCategoryColor(pred.class) }}>
                         {pred.class}
                       </span>
-                      <span className="confidence">
+                      <span 
+                        className="confidence"
+                        aria-label={`${pred.class}: ${(pred.confidence * 100).toFixed(1)} percent confidence`}
+                      >
                         {(pred.confidence * 100).toFixed(1)}%
                       </span>
                       <div 
@@ -241,6 +266,11 @@ function App() {
                           width: `${pred.confidence * 100}%`,
                           backgroundColor: getCategoryColor(pred.class)
                         }}
+                        role="progressbar"
+                        aria-valuenow={pred.confidence * 100}
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-label={`Confidence level for ${pred.class}`}
                       />
                     </div>
                   ))}
@@ -252,7 +282,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>Building smarter systems for a sustainable future</p>
+        <p>Building systems for a sustainable future</p>
         <p>© 2024-2025 Gather</p>
       </footer>
     </div>

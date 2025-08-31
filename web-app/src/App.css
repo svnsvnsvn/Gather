@@ -39,6 +39,38 @@
   box-sizing: border-box;
 }
 
+/* Skip to main content link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: var(--water-deep);
+  color: var(--cream);
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 1000;
+  font-weight: 500;
+  transition: top 0.3s ease;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* Visually hidden but accessible to screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   font-family: var(--font-secondary);
   background: linear-gradient(135deg, var(--forest-deep) 0%, var(--moss-green) 100%);
@@ -162,6 +194,28 @@ body {
   text-decoration-thickness: 2px;
 }
 
+/* Focus styles for accessibility */
+.retry-btn:focus {
+  outline: 2px solid var(--rust-subtle);
+  outline-offset: 4px;
+  color: var(--bark-dark);
+  text-decoration-thickness: 2px;
+}
+
+/* Global focus improvements */
+*:focus {
+  outline: none;
+}
+
+/* Custom focus styles for interactive elements */
+button:focus,
+input:focus,
+a:focus {
+  box-shadow: 0 0 0 3px rgba(74, 124, 149, 0.3);
+  outline: 2px solid var(--water-mid);
+  outline-offset: 2px;
+}
+
 .retry-btn:hover {
   background: #c82333;
   transform: translateY(-1px);
@@ -234,6 +288,13 @@ body {
   width: 100%;
 }
 
+/* Focus styles for accessibility */
+.upload-btn:focus {
+  outline: 2px solid var(--water-mid);
+  outline-offset: 4px;
+  color: var(--text-primary);
+}
+
 .reset-btn {
   display: inline-block;
   padding: 20px 0;
@@ -271,6 +332,13 @@ body {
 
 .reset-btn:hover::before {
   width: 100%;
+}
+
+/* Focus styles for accessibility */
+.reset-btn:focus {
+  outline: 2px solid var(--rust-subtle);
+  outline-offset: 4px;
+  color: var(--text-secondary);
 }
 
 /* Image Section */
@@ -342,6 +410,16 @@ body {
 
 .classify-btn:disabled::before {
   display: none;
+}
+
+/* Focus styles for accessibility */
+.classify-btn:focus {
+  outline: 2px solid var(--water-mid);
+  outline-offset: 4px;
+}
+
+.classify-btn:focus:not(:disabled) {
+  color: var(--water-deep);
 }
 
 /* Loading animation */
