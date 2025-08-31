@@ -1,9 +1,9 @@
 # Multi-stage build: Frontend first, then backend
-FROM node:18-alpine AS frontend
+FROM node:20-alpine AS frontend
 
 WORKDIR /app/frontend
 COPY web-app/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 COPY web-app/ ./
 RUN npm run build
 
