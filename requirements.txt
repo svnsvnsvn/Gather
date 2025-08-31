@@ -1,8 +1,16 @@
-tensorflow>=2.8.0
-numpy>=1.21.0
+# Main project dependencies for development and research
+tensorflow>=2.19.0
+numpy>=1.26.0
 matplotlib>=3.5.0
 jupyter>=1.0.0
-Pillow>=8.0.0
+Pillow>=10.0.0
+pandas>=1.5.0
+scikit-learn>=1.0.0
 
 # Optional: For model deployment
 tensorflowjs>=3.0.0
+
+# Development tools
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0
