@@ -151,9 +151,12 @@ if __name__ == '__main__':
         logger.info("Model loaded successfully! Starting server...")
         # Use environment variables for production deployment
         import os
-        host = os.environ.get('HOST', config.api_host)
+        # For Railway deployment, always bind to 0.0.0.0 in production
+        host = '0.0.0.0' if os.environ.get('FLASK_ENV') == 'production' else os.environ.get('HOST', config.api_host)
         port = int(os.environ.get('PORT', config.api_port))
         debug = os.environ.get('FLASK_ENV') != 'production'
+        
+        logger.info(f"Starting server on {host}:{port} (debug={debug})")
         
         app.run(
             debug=debug, 
