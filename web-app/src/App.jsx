@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
-// Use environment variable for API URL, fallback to localhost for development
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+// Use environment variable for API URL
+// In production, use relative URLs since frontend and backend are on same domain
+// In development, fallback to localhost backend
+const API_BASE = import.meta.env.VITE_API_URL || (
+  import.meta.env.MODE === 'production' ? '' : 'http://localhost:5001'
+)
 
 function App() {
   const [selectedImage, setSelectedImage] = useState(null)
